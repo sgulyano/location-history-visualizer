@@ -9,6 +9,7 @@
 
 	function status(message) {
 		$('#currentStatus').text(message);
+		console.log(message)
 	}
 	// Start at the beginning
 	stageOne();
@@ -16,10 +17,13 @@
 	function stageOne() {
 		var dropzone;
 
+		// select map style here
+		// https://gis.stackexchange.com/questions/244788/map-ids-to-add-mapbox-basemaps-to-leaflet-or-openlayers
 		// Initialize the map
 		map = L.map('map').setView([14.069737, 100.603635], 11);
-		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-			attribution: 'location-history-visualizer is open source and available <a href="https://github.com/theopolisme/location-history-visualizer">on GitHub</a>. Map data &copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors.',
+		L.tileLayer('https://{s}.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token=pk.eyJ1IjoieW9zYXJ1biIsImEiOiJjazhmeGkzZWgwN3V6M3BvM3J3OTBzM2JmIn0.bIOwcK1dDMh0xuJaLebYcw', {
+			id: 'mapbox.streets',
+			attribution: 'location-history-visualizer is open source and available <a href="https://github.com/theopolisme/location-history-visualizer">on GitHub</a>. Map data &copy; <a href="https://www.mapbox.com/">Mapbox</a> contributors.',
 			maxZoom: 18,
 			minZoom: 2
 		}).addTo(map);
@@ -64,7 +68,7 @@
 
 	function stageTwo(file) {
 		// Google Analytics event - heatmap upload file
-		ga('send', 'event', 'Heatmap', 'upload', undefined, file.size);
+		ga('send', 'event', 'Heatmap', 'upload', file.size);
 
 		heat = L.heatLayer([], heatOptions).addTo(map);
 
@@ -111,7 +115,6 @@
 		});
 
 		var fileSize = prettySize(file.size);
-
 		status('Preparing to import file ( ' + fileSize + ' )...');
 
 		// Now start working!
@@ -121,7 +124,7 @@
 
 	function stageThree(numberProcessed) {
 		// Google Analytics event - heatmap render
-		ga('send', 'event', 'Heatmap', 'render', undefined, numberProcessed);
+		ga('send', 'event', 'Heatmap', 'render',  numberProcessed);
 
 		var $done = $('#done');
 
@@ -267,20 +270,36 @@
 	}
 
 	function getLocationDataFromKml(data) {
-		var KML_DATA_REGEXP = /<when>( .*? )<\/when>\s*<gx:coord>( \S* )\s( \S* )\s( \S* )<\/gx:coord>/g,
+		var KML_DATA_REGEXP = /<Placemark>(.*?)<\/Placemark>/g,
+			KML_DETAIL_DATA_REGEXP = /<name>(.*?)<\/name>.*?<coordinates>(.*?)<\/coordinates>.*?<TimeSpan><begin>(.*?)<\/begin><end>(.*?)<\/end><\/TimeSpan>/,
+			KML_COORD_DATA_REGEXP = /(-?\d{1,3}(\.\d+)?),(-?\d{1,3}(\.\d+)?),(-?\d{1,3}(\.\d+)?)/g,
 			locations = [],
+			places = [],
 			match = KML_DATA_REGEXP.exec(data);
-
+		
 		// match
 		//  [ 1 ] ISO 8601 timestamp
 		//  [ 2 ] longitude
 		//  [ 3 ] latitude
 		//  [ 4 ] altitude ( not currently provided by Location History )
+		
 		while (match !== null) {
-			locations.push([Number(match[3]), Number(match[2])]);
+			places.push(match)
+			let details = KML_DETAIL_DATA_REGEXP.exec(match[1]);
+			
+			KML_COORD_DATA_REGEXP.lastIndex = 0
+			let coord = KML_COORD_DATA_REGEXP.exec(details[2]);
+			while (coord !== null) {
+				let lon = coord[1]
+				let lat = coord[3]
+				locations.push([Number(lat), Number(lon)]);
+				coord = KML_COORD_DATA_REGEXP.exec(details[2]);
+			}
+
+			// locations.push([Number(match[3]), Number(match[2])]);
 			match = KML_DATA_REGEXP.exec(data);
 		}
-
+		status('Load ' + places.length + ' places, '+ locations.length + ' points...');
 		return locations;
 	}
 
